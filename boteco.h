@@ -10,8 +10,6 @@
 
 #include <pthread.h>      // threads e mutex, para pthread_create, pthread_detach
 
-#include <signal.h>   // captura de Ctrl+C no servidor
-
 #define MAX_CLIENTES  30              // conexoes simultaneas suportadas
 #define TAM_APELIDO   32              // tamanho maximo do apelido
 #define TAM_MENSAGEM  (TAM_BUFFER + TAM_APELIDO + 32)
@@ -22,14 +20,6 @@
 #define MAX_FILA    10    //conexoes pendentes na fila do listen
 
 #define NOME_APP "Boteco" 
-
-// funçoes auxiliares
-static int adicionar_cliente(int fd);
-static void remover_cliente(int fd);
-static void broadcast(const char *mensagem, int remetente);
-void *thread_cliente(void *arg);
-static void enviar_para(int fd, const char *mensagem);
-static void remover_quebra_linha(char *texto);
 
 #endif 
 
