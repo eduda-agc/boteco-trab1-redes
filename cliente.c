@@ -5,31 +5,13 @@
 
 // socket do servidor, usado para enviar e receber mensagens. A thread de recebimento precisa dele, por isso é global.
 static int fd_servidor;
+
+
+
 // thread que so recebe mensagens do servidor e imprime na tela. Termina quando o servidor fecha a conexao.
-void *thread_recebimento(void *arg) {
-    char buffer[TAM_BUFFER];
-    ssize_t bytes;
+void *thread_recebimento(void *arg);
 
-    (void)arg; //parametro nao utilizado; evita warning do -Wextra
 
-    while ((bytes = recv(fd_servidor, buffer, sizeof(buffer) - 1, 0)) > 0) {
-        buffer[bytes] = '\0';
-        printf("%s", buffer);
-        fflush(stdout);// forca a impressao imediata, sem esperar o \n do buffer 
-    }
-
-    if (bytes == 0) {
-        printf("\n[%s] Conexao encerrada pelo servidor.\n", NOME_APP);
-    } else {
-        perror("Erro no recv");
-    }
-
-    // encerra o socket e termina o programa. A thread principal vai terminar logo em seguida.
-    close(fd_servidor);
-    exit(EXIT_SUCCESS);
-
-    return NULL;  // nunca chega aqui, mas evita warning do -Wextra
-}
 
 int main(void) {
     struct sockaddr_in endereco;   
@@ -61,8 +43,7 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
-    printf("[%s] Conectado a %s:%d. Digite /ajuda para ver os comandos.\n",
-           NOME_APP, IP_SERVIDOR, PORTA);
+    printf("[%s] Conectado a %s:%d. Digite /ajuda para ver os comandos.\n", NOME_APP, IP_SERVIDOR, PORTA);
 
     // cria a thread que so recebe mensagens do servidor e imprime na tela
     erro = pthread_create(&tid, NULL, thread_recebimento, NULL);
@@ -89,4 +70,30 @@ int main(void) {
     printf("[%s] Cliente encerrado.\n", NOME_APP);
 
     return 0;
+}
+
+// --------------------------------------------------------------------------------------------------
+void *thread_recebimento(void *arg) {
+    char buffer[TAM_BUFFER];
+    ssize_t bytes;
+
+    (void)arg; //parametro nao utilizado; evita warning do -Wextra
+
+    while ((bytes = recv(fd_servidor, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes] = '\0';
+        printf("%s", buffer);
+        fflush(stdout);// forca a impressao imediata, sem esperar o \n do buffer 
+    }
+
+    if (bytes == 0) {
+        printf("\n[%s] Conexao encerrada pelo servidor.\n", NOME_APP);
+    } else {
+        perror("Erro no recv");
+    }
+
+    // encerra o socket e termina o programa. A thread principal vai terminar logo em seguida.
+    close(fd_servidor);
+    exit(EXIT_SUCCESS);
+
+    return NULL;  // nunca chega aqui, mas evita warning do -Wextra
 }
