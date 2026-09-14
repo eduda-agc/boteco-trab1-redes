@@ -26,9 +26,12 @@ int main(void) {
     socklen_t tam_cliente; //tamanho da struct do cliente
 
     char ip_cliente[INET_ADDRSTRLEN]; //IP do cliente em formato texto 
-    pthreard_t tid; //identificador da thread do cliente
+    pthread_t tid; //identificador da thread do cliente
     
-    ssize_t bytes; //bytes lidos pelo recv
+    for (i=0; i < MAX_CLIENTES; i++) {//inicializa todos os slots como livres
+        clientes[i].ativo = 0;
+        clientes[i].fd = -1;
+    }
 
     //cria socket (TCP)
     fd_servidor = socket(AF_INET, SOCK_STREAM, 0);
@@ -50,6 +53,7 @@ int main(void) {
     endereco.sin_addr.s_addr = INADDR_ANY;   // aceita conexao de qualquer interface 
     endereco.sin_port        = htons(PORTA);
 
+    // associa o socket a porta e IP local. falha aqui normalmente = porta ocupada
     if (bind(fd_servidor, (struct sockaddr *)&endereco, sizeof(endereco)) < 0) {
         perror("Erro no bind");
         close(fd_servidor);
@@ -63,45 +67,57 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Servidor escutando na porta %d...\n", PORTA);
+    printf("[%s] Servidor escutando na porta %d (ate %d clientes)...\n", NOME_APP, PORTA, MAX_CLIENTES);
 
-    
-    tam_cliente = sizeof(cliente);
-    fd_cliente = accept(fd_servidor, (struct sockaddr *)&cliente, &tam_cliente); // bloqueia até um cliente entrar
-    if (fd_cliente < 0) {
-        perror("Erro no accept");
-        close(fd_servidor);
-        exit(EXIT_FAILURE);
-    }
 
-    inet_ntop(AF_INET, &cliente.sin_addr, ip_cliente, sizeof(ip_cliente));
-    printf("Cliente conectado: %s:%d\n", ip_cliente, ntohs(cliente.sin_port));
-
-    // laço de eco
-    while ((bytes = recv(fd_cliente, buffer, sizeof(buffer) - 1, 0)) > 0) {
-        buffer[bytes] = '\0';   //garante terminacao da string antes de imprimir 
-        printf("Recebido (%zd bytes): %s", bytes, buffer);
-
-        if (send(fd_cliente, buffer, (size_t)bytes, 0) < 0) {
-            perror("Erro no send");
-            break;
+    // laço infinito: aceita conexoes e cria threads para cada cliente
+    while (1) {
+        tam_cliente = sizeof(cliente);
+        fd_cliente = accept(fd_servidor, (struct sockaddr *)&cliente, &tam_cliente); // bloqueia até um cliente entrar
+        if (fd_cliente < 0) {
+            perror("Erro no accept");
+            close(fd_servidor);
+            exit(EXIT_FAILURE);
         }
+
+        inet_ntop(AF_INET, &cliente.sin_addr, ip_cliente, sizeof(ip_cliente));
+        printf("Conexao recebida de %s:%d\n", ip_cliente, ntohs(cliente.sin_port));
+
+        // adiciona o cliente na lista de clientes conectados
+        indice = adicionar_cliente(fd_cliente);
+        if (indice < 0) {
+            const char *aviso = "*** Boteco lotado, tente mais tarde ***\n";
+            send(fd_cliente, aviso, strlen(aviso), 0);
+            close(fd_cliente);
+            printf("Conexao recusada: limite de %d clientes atingido\n", MAX_CLIENTES);
+            continue;
+        }
+ 
+        // cria a thread para lidar com o cliente
+        arg_thread = malloc(sizeof(int));
+        if (arg_thread == NULL) {
+            perror("Erro ao alocar argumento da thread");
+            remover_cliente(indice);
+            continue;
+        }
+        *arg_thread = indice;
+ 
+        erro = pthread_create(&tid, NULL, thread_cliente, arg_thread);
+        if (erro != 0) {
+            fprintf(stderr, "Erro ao criar thread do cliente: %s\n", strerror(erro));
+            free(arg_thread);
+            remover_cliente(indice);
+            continue;
+        }
+ 
+        // libera os recursos da thread automaticamente no fim
+        pthread_detach(tid);
     }
 
-    if (bytes == 0) {
-        printf("Cliente encerrou a conexao.\n");
-    } else if (bytes < 0) {
-        perror("Erro no recv");
-    }
-
-    // libera os descritores do cliente e do de escuta
-    close(fd_cliente);
     close(fd_servidor);
-    printf("Servidor encerrado.\n");
-
     return 0;
 }
-// adiciona um cliente à lista de clientes conectados
+
 static int adicionar_cliente(int fd) {
     int i;
     int indice = -1;
@@ -118,11 +134,10 @@ static int adicionar_cliente(int fd) {
     }
     pthread_mutex_unlock(&mutex_clientes);
  
-    return indice; // retorna o índice do cliente adicionado ou -1 se não houver espaço
-
+    return indice;
 }
 
-// Remove um cliente da lista de clientes conectados
+// remove um cliente da lista de clientes conectados
 static void remover_cliente(int indice) {
         pthread_mutex_lock(&mutex_clientes);
     if (clientes[indice].ativo) {
@@ -134,7 +149,7 @@ static void remover_cliente(int indice) {
 
 }
 
-// Envia uma mensagem para todos os clientes conectados, exceto o remetente
+// envia uma mensagem para todos os clientes conectados, exceto o remetente
 static void broadcast(const char *mensagem, int remetente) {
     int i;
  
@@ -149,7 +164,7 @@ static void broadcast(const char *mensagem, int remetente) {
     pthread_mutex_unlock(&mutex_clientes);
 }
 
-// Thread que lida com a comunicação de um cliente específico
+// thread que lida com a comunicação de um cliente específico
 void *thread_cliente(void *arg) {
     int  indice = *((int *)arg);
     int  fd;
