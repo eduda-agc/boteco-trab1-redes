@@ -1,8 +1,6 @@
 
 #include "boteco.h"   
 
-#include <pthread.h> // para pthread_create, pthread_detach 
-
 #define IP_SERVIDOR  "127.0.0.1" //loopback: servidor na mesma maquina 
 
 //global, pois precisa ser visto pela thread de recebimento e pela main. 

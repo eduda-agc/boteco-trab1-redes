@@ -1,16 +1,33 @@
 #include "boteco.h"
 
+typedef struct 
+{
+    int fd; // socket do cliente
+    char apelido[TAM_APELIDO]; // apelido do cliente
+    int ativo; // flag para indicar se o cliente está ativo
+} Cliente;
+
+static Cliente clientes[MAX_CLIENTES]; // array de clientes conectados
+static pthread_mutex_t mutex_clientes = PTHREAD_MUTEX_INITIALIZER; // mutex para proteger o array de clientes
+
+// O DESENVOLVIMENTO DAS FUNÇÕES AUXILIARES (adicionar_cliente, remover_cliente, broadcast...) ESTÃO NO FINAL DO ARQUIVO, APÓS O MAIN, PARA MANTER A ORGANIZAÇÃO DO CÓDIGO...
+
 int main(void) {
     int fd_servidor; //socket de escuta 
     int fd_cliente; //socket de comunicacao com o cliente
     int opt = 1; //flag para o SO_REUSEADDR 
+    int i;
+    int indice;
+    int erro;
+    int *arg_thread;
     struct sockaddr_in endereco; //endereco do servidor
     struct sockaddr_in cliente; //endereco preenchido pelo accept 
     
-    socklen_t tam_cliente; //tamanho da struct do cliente 
-    
-    char buffer[TAM_BUFFER]; //area de recepcao das mensagens 
+    socklen_t tam_cliente; //tamanho da struct do cliente
+
     char ip_cliente[INET_ADDRSTRLEN]; //IP do cliente em formato texto 
+    pthreard_t tid; //identificador da thread do cliente
+    
     ssize_t bytes; //bytes lidos pelo recv
 
     //cria socket (TCP)
@@ -84,3 +101,99 @@ int main(void) {
 
     return 0;
 }
+// adiciona um cliente à lista de clientes conectados
+static int adicionar_cliente(int fd) {
+    int i;
+    int indice = -1;
+ 
+    pthread_mutex_lock(&mutex_clientes);
+    for (i = 0; i < MAX_CLIENTES; i++) {
+        if (!clientes[i].ativo) {
+            clientes[i].fd    = fd;
+            clientes[i].ativo = 1;
+            snprintf(clientes[i].apelido, TAM_APELIDO, "Convidado-%d", i + 1);
+            indice = i;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&mutex_clientes);
+ 
+    return indice; // retorna o índice do cliente adicionado ou -1 se não houver espaço
+
+}
+
+// Remove um cliente da lista de clientes conectados
+static void remover_cliente(int indice) {
+        pthread_mutex_lock(&mutex_clientes);
+    if (clientes[indice].ativo) {
+        close(clientes[indice].fd);
+        clientes[indice].fd    = -1;
+        clientes[indice].ativo = 0;
+    }
+    pthread_mutex_unlock(&mutex_clientes);
+
+}
+
+// Envia uma mensagem para todos os clientes conectados, exceto o remetente
+static void broadcast(const char *mensagem, int remetente) {
+    int i;
+ 
+    pthread_mutex_lock(&mutex_clientes);
+    for (i = 0; i < MAX_CLIENTES; i++) {
+        if (clientes[i].ativo && i != remetente) {
+            if (send(clientes[i].fd, mensagem, strlen(mensagem), 0) < 0) {
+                perror("Erro ao enviar no broadcast");
+            }
+        }
+    }
+    pthread_mutex_unlock(&mutex_clientes);
+}
+
+// Thread que lida com a comunicação de um cliente específico
+void *thread_cliente(void *arg) {
+    int  indice = *((int *)arg);
+    int  fd;
+    char apelido[TAM_APELIDO];
+    char buffer[TAM_BUFFER];
+    char mensagem[TAM_MENSAGEM];
+    ssize_t bytes;
+ 
+    free(arg);
+ 
+    //copia os dados do slot uma unica vez, sob protecao do mutex. 
+    pthread_mutex_lock(&mutex_clientes);
+    fd = clientes[indice].fd;
+    snprintf(apelido, TAM_APELIDO, "%s", clientes[indice].apelido);
+    pthread_mutex_unlock(&mutex_clientes);
+ 
+    // avisa os demais que alguem chegou. 
+    snprintf(mensagem, sizeof(mensagem), "*** %s entrou no boteco ***\n", apelido);
+    printf("%s", mensagem);
+    broadcast(mensagem, indice);
+ 
+    // laço de recepcao: identico ao do bloco 2, mas agora rodando em paralelo com as threads dos outros clientes.
+    while ((bytes = recv(fd, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes] = '\0';
+ 
+        snprintf(mensagem, sizeof(mensagem), "[%s] %s", apelido, buffer);
+        printf("%s", mensagem);
+        broadcast(mensagem, indice);
+    }
+ 
+    if (bytes < 0) {
+        perror("Erro no recv");
+    }
+ 
+    //encerramento: libera o slot antes de anunciar a saida, para que o proprio cliente que saiu nao receba a mensagem. 
+    remover_cliente(indice);
+ 
+    snprintf(mensagem, sizeof(mensagem), "*** %s saiu do boteco ***\n", apelido);
+    printf("%s", mensagem);
+    broadcast(mensagem, -1);
+ 
+    return NULL;
+}
+
+
+
+
