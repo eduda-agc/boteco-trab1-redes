@@ -2,16 +2,23 @@
 
 Trabalho 1 — Redes de Computadores — ICMC/USP São Carlos
 
-**Autora:** Eduarda Almeida Garrett de Carvalho — nº USP 14566794
+**Autora:** Eduarda `<nome completo>` — nº USP `<preencher>`
 
 ---
 
 ## Descrição
 
-Aplicação cliente/servidor de bate-papo em sala única. O servidor aceita até 30
-conexões simultâneas, cada uma atendida por uma thread própria, e retransmite as
-mensagens recebidas para todos os demais participantes. O cliente permite enviar
-e receber ao mesmo tempo, sem travar à espera do teclado.
+Aplicação cliente/servidor de bate-papo em sala única, com um jogo de mesa
+embutido. O servidor aceita até 30 conexões simultâneas, cada uma atendida por
+uma thread própria, e retransmite as mensagens recebidas para todos os demais
+participantes. O cliente permite enviar e receber ao mesmo tempo, sem travar à
+espera do teclado.
+
+Além da conversa livre, os participantes podem abrir rodadas do **Jogo do
+Boteco**, uma variação do jogo ITO em que cada jogador recebe um número secreto
+e precisa descrevê-lo com uma frase, sem dizer o valor. Dois jogadores
+automáticos participam de todas as rodadas, o que permite jogar mesmo com um
+único cliente conectado.
 
 Implementado em C puro, sem bibliotecas externas: apenas a API de sockets POSIX
 (`sys/socket.h`, `arpa/inet.h`) e a biblioteca de threads POSIX (`pthread.h`).
@@ -32,6 +39,7 @@ Implementado em C puro, sem bibliotecas externas: apenas a API de sockets POSIX
 | `boteco.h` | Constantes e includes comuns a todos os módulos |
 | `clientes.h` / `clientes.c` | Lista de clientes conectados, mutex e broadcast |
 | `comandos.h` / `comandos.c` | Interpretação dos comandos iniciados por `/` |
+| `jogo.h` / `jogo.c` | Estado das rodadas, temas, sorteio e jogadores automáticos |
 | `servidor.c` | Socket de escuta, laço de `accept`, thread de cada cliente |
 | `cliente.c` | Conexão ao servidor e envio/recebimento simultâneos |
 | `Makefile` | Compilação, execução e empacotamento |
@@ -88,7 +96,43 @@ Encerre o servidor com `Ctrl+C`.
 | `/sussurro <apelido> <msg>` | Mensagem privada a um participante |
 | `/sair` | Encerra a conexão do cliente |
 
+### Comandos do jogo
+
+| Comando | Efeito |
+|---|---|
+| `/jogar` | Abre uma rodada: sorteia o tema e os números secretos |
+| `/meunumero` | Informa, em particular, o número secreto de quem pediu |
+| `/dica <frase>` | Registra a dica sem revelá-la aos demais |
+| `/revelar` | Mostra todas as dicas, quando todos já tiverem enviado a sua |
+| `/ordem <ap1> <ap2> ...` | Fecha a rodada, confere a ordem e revela os números |
+| `/placar` | Mostra a situação da rodada em andamento |
+
 Qualquer linha que não comece com `/` é transmitida aos demais participantes.
+
+## O Jogo do Boteco
+
+Cada participante da rodada recebe um número secreto de 1 a 100, sem repetição,
+e um tema é sorteado entre três (o quão cara é a coisa, o quão assustador é o
+bicho, o quão constrangedor é o vexame). Cada um descreve o próprio número com
+uma frase dentro do tema. Depois que todos enviaram a dica, `/revelar` mostra
+todas juntas e a mesa combina qual seria a ordem crescente. `/ordem` fecha a
+rodada, revela os números e informa se a ordem estava correta.
+
+**Jogadores automáticos.** Duas participações são geradas pelo próprio servidor.
+Cada tema tem cinco faixas de valor com uma frase fixa associada, definidas em
+tabelas estáticas dentro de `jogo.c`; o jogador automático simplesmente escolhe a
+frase da faixa em que caiu o próprio número. A estratégia é deliberadamente
+simples e previsível.
+
+Na hora de palpitar a ordem, cada jogador automático conhece o próprio número e
+reconhece as frases dos demais jogadores automáticos, por virem da mesma tabela.
+Diante de uma dica escrita por um humano, porém, não tem como interpretá-la e
+atribui uma posição aleatória. O resultado é que eles acertam a posição relativa
+entre si e erram a dos humanos.
+
+As tabelas de frases ficam em código, e não em arquivo externo, para que a
+aplicação não dependa do diretório de execução nem de tratamento de leitura de
+arquivo em tempo de execução.
 
 ## Arquitetura de concorrência
 
@@ -110,6 +154,16 @@ descritor já fechado.
 
 Como o mutex padrão do pthread não é recursivo, nenhuma função travada chama
 outra que também trave — travar duas vezes na mesma thread causaria *deadlock*.
+
+O módulo do jogo mantém um segundo mutex, `mutex_jogo`, independente do mutex da
+lista de clientes. Nenhuma função segura os dois ao mesmo tempo: `jogo_iniciar`
+consulta a lista de clientes conectados antes de travar o mutex do jogo. Manter
+dois mutexes travados em ordens diferentes por threads diferentes é a causa
+clássica de *deadlock*, e a separação acima evita a situação por construção.
+
+As funções de `jogo.c` também não enviam nada pela rede: montam o texto da
+resposta em um buffer e devolvem se ela é pública ou privada. O envio ocorre em
+`comandos.c`, já com o mutex do jogo liberado.
 
 ## Tratamento de falhas de conexão e transmissão
 
@@ -152,6 +206,11 @@ terminar.
 
 - Sala única: não há separação por canais ou salas.
 - Apelidos não são persistentes entre execuções.
+- Uma rodada por vez: não há partidas simultâneas.
+- Quem se conecta depois da abertura da rodada só participa da seguinte.
+- Quem se desconecta durante a rodada permanece na lista de participantes até
+  que ela seja encerrada.
+- Não há placar acumulado entre rodadas.
 - Mensagens acima de 1023 bytes são entregues fragmentadas, comportamento
   esperado de TCP, que é um fluxo de bytes e não de mensagens delimitadas.
 - Comunicação em texto puro, sem qualquer cifragem.
