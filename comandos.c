@@ -1,6 +1,7 @@
  
 #include "comandos.h"
 #include "clientes.h"
+#include "jogo.h"
  
 const char *TEXTO_AJUDA =
     "*** Comandos do Boteco:\n"
@@ -8,7 +9,15 @@ const char *TEXTO_AJUDA =
     "    /apelido <nome>            troca seu nome\n"
     "    /quem                      quem esta no boteco\n"
     "    /sussurro <apelido> <msg>  mensagem privada\n"
-    "    /sair                      vai embora\n";
+    "    /sair                      vai embora\n"
+    "*** Jogo do Boteco:\n"
+    "    /jogar                     abre uma rodada\n"
+    "    /meunumero                 ve seu numero secreto\n"
+    "    /dica <frase>              descreve seu numero\n"
+    "    /revelar                   mostra todas as dicas\n"
+    "    /ordem <ap1> <ap2> ...     fecha a rodada e confere\n"
+    "    /placar                    situacao da rodada\n";
+
 
 // remove \n e \r do fim da linha recebida, para facilitar o parse
 void remover_quebra_linha(char *texto) {
@@ -22,7 +31,7 @@ void remover_quebra_linha(char *texto) {
 //trata /apelido <nome>. Retorna sempre 0 (nao desconecta)
 static int comando_apelido(int indice, int fd, char *apelido, char *linha) {
     char mensagem[TAM_MENSAGEM];
-    char *argumento = linha + 9;   /* pula "/apelido " */
+    char *argumento = linha + 9; // pula "/apelido "
  
     while (*argumento == ' ') {
         argumento++;
@@ -79,6 +88,43 @@ static int comando_sussurro(int fd, const char *apelido, char *linha) {
  
     return 0;
 }
+
+// envia a resposta do jogo para o cliente ou para todos, dependendo do destino
+static void responder_jogo(int destino, int fd, const char *texto) {
+    if (destino == JOGO_PUBLICO) {
+        printf("%s", texto);
+        broadcast(texto, -1);
+    } else {
+        enviar_para(fd, texto);
+    }
+}
+
+//processa os comandos do jogo. Retorna 1 se o comando era do jogo, 0 caso contrario
+static int comando_de_jogo(int indice, int fd, const char *apelido, char *linha) {
+    char texto[TAM_TEXTO_JOGO];
+    int destino;
+ 
+    if (strcmp(linha, "/jogar") == 0) {
+        destino = jogo_iniciar(apelido, texto, sizeof(texto));
+    } else if (strcmp(linha, "/meunumero") == 0) {
+        destino = jogo_meu_numero(indice, texto, sizeof(texto));
+    } else if (strcmp(linha, "/revelar") == 0) {
+        destino = jogo_revelar(texto, sizeof(texto));
+    } else if (strcmp(linha, "/placar") == 0) {
+        destino = jogo_status(texto, sizeof(texto));
+    } else if (strncmp(linha, "/dica ", 6) == 0) {
+        destino = jogo_dica(indice, linha + 6, texto, sizeof(texto));
+    } else if (strncmp(linha, "/ordem ", 7) == 0) {
+        destino = jogo_ordem(apelido, linha + 7, texto, sizeof(texto));
+    } else {
+        return 0;   /* nao e comando do jogo */
+    }
+ 
+    responder_jogo(destino, fd, texto);
+    return 1;
+}
+
+
 
 //processa os comandos recebidos de um cliente. Retorna 1 se o cliente deve ser desconectado, 0 caso contrario
 int processar_comando(int indice, int fd, char *apelido, char *linha) {

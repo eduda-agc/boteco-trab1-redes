@@ -27,7 +27,10 @@ int trocar_apelido(int indice, const char *novo);
  
 // devolve o socket de quem usa esse apelido, ou -1 se ninguem usa
 int fd_por_apelido(const char *apelido);
- 
+
+// devolve o indice do slot de quem usa esse apelido, ou -1 se ninguem usa
+int listar_ativos(int *indices, char apelidos[][TAM_APELIDO], int max);
+
 // monta o texto da lista de conectados no buffer recebido.
 void montar_lista(char *destino, size_t tam);
  

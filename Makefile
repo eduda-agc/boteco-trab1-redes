@@ -2,11 +2,11 @@
 CC      = gcc
 CFLAGS  = -Wall -Wextra -pthread
 EXECS   = servidor cliente
-HEADERS = boteco.h clientes.h comandos.h
+HEADERS = boteco.h clientes.h comandos.h jogo.h
 ZIP     = boteco-trab1-redes.zip
  
 # Objetos de cada programa. O cliente nao usa os modulos do servidor.
-OBJ_SERVIDOR = servidor.o clientes.o comandos.o
+OBJ_SERVIDOR = servidor.o clientes.o comandos.o jogo.o
 OBJ_CLIENTE  = cliente.o
  
 # Alvo padrao: compila os dois programas.
@@ -42,4 +42,4 @@ zip: clean
  
 # Alvos que nao geram arquivo com esse nome.
 .PHONY: all run-servidor run-cliente clean zip
-
+ 

@@ -31,6 +31,10 @@ int main(void) {
     char ip_cliente[INET_ADDRSTRLEN]; //IP do cliente em formato texto 
     pthread_t tid; //identificador da thread do cliente
 
+    inicializar_clientes();
+
+    srand((unsigned int)time(NULL)); //inicializa gerador de números aleatórios 
+
     // antes de abrir o socket, registra o tratador de SIGINT para encerrar o servidor com Ctrl+C   
     if (signal(SIGINT, tratar_sigint) == SIG_ERR) {
         perror("Erro ao registrar tratador de SIGINT");
@@ -85,9 +89,11 @@ int main(void) {
         tam_cliente = sizeof(cliente);
         fd_cliente = accept(fd_servidor, (struct sockaddr *)&cliente, &tam_cliente); // bloqueia até um cliente entrar
         if (fd_cliente < 0) {
+            if (!servidor_rodando) {
+                break;   // servidor foi encerrado, sai do loop
+            }
             perror("Erro no accept");
-            close(fd_servidor);
-            exit(EXIT_FAILURE);
+            continue;
         }
 
         inet_ntop(AF_INET, &cliente.sin_addr, ip_cliente, sizeof(ip_cliente));

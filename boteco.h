@@ -21,5 +21,13 @@
 
 #define NOME_APP "Boteco" 
 
+// para o jogo no estilo ITO]
+#define NUM_BOTS        2  // numero de bots que participam do jogo
+#define MAX_JOGADORES   (MAX_CLIENTES + NUM_BOTS)
+#define NUM_FAIXAS      5 // numero de faixas de valores para cada tema
+#define TAM_DICA        128 // tamanho maximo de uma dica
+#define TAM_TEXTO_JOGO  4096 // tamanho maximo de uma resposta do jogo
+
+
 #endif 
 

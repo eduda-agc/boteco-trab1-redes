@@ -124,6 +124,26 @@ int fd_por_apelido(const char *apelido) {
  
     return fd;
 }
+
+// devolve o indice do slot de quem usa esse apelido, ou -1 se ninguem usa
+int listar_ativos(int *indices, char apelidos[][TAM_APELIDO], int max) {
+    int i;
+    int total = 0;
+ 
+    pthread_mutex_lock(&mutex_clientes);
+    for (i = 0; i < MAX_CLIENTES && total < max; i++) {
+        if (clientes[i].ativo) {
+            indices[total] = i;
+            snprintf(apelidos[total], TAM_APELIDO, "%s", clientes[i].apelido);
+            total++;
+        }
+    }
+    pthread_mutex_unlock(&mutex_clientes);
+ 
+    return total;
+}
+
+
 // monta o texto da lista de conectados no buffer recebido
 void montar_lista(char *destino, size_t tam) {
     size_t usado;
