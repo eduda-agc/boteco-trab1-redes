@@ -2,7 +2,7 @@
 
 Trabalho 1 — Redes de Computadores — ICMC/USP São Carlos
 
-**Autora:** Eduarda `<nome completo>` — nº USP `<preencher>`
+**Autora:** Eduarda Almeida Garrett de Carvalho — nº USP 14566794
 
 ---
 
